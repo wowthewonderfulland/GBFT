@@ -37,15 +37,15 @@ func (server *Server) setRoute() {
 	http.HandleFunc("/prepare", server.getPrepare)
 	http.HandleFunc("/commit", server.getCommit)
 	http.HandleFunc("/reply", server.getReply)
+	http.HandleFunc("/viewchange", server.getViewChange)
+	http.HandleFunc("/viewchangeclame", server.getViewChangeClame)
 }
 
 func (server *Server) getReq(writer http.ResponseWriter, request *http.Request) {
-	fmt.Println("-------")
 	var msg consensus.RequestMsg
 	err := json.NewDecoder(request.Body).Decode(&msg)
 	if err != nil {
 		fmt.Println(err)
-		fmt.Println("~~~~~")
 		return
 	}
 
@@ -94,6 +94,28 @@ func (server *Server) getReply(writer http.ResponseWriter, request *http.Request
 	}
 
 	server.node.GetReply(&msg)
+}
+
+func (server *Server) getViewChange(writer http.ResponseWriter, request *http.Request) {
+	// var msg consensus.ViewChangeMsg
+	// err := json.NewDecoder(request.Body).Decode(&msg)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	return
+	// }
+
+	// server.node.MsgEntrance <- &msg
+}
+
+func (server *Server) getViewChangeClame(writer http.ResponseWriter, request *http.Request) {
+	// var msg consensus.ViewChangeMsg
+	// err := json.NewDecoder(request.Body).Decode(&msg)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	return
+	// }
+
+	// server.node.MsgEntrance <- &msg
 }
 
 func send(url string, msg []byte) {

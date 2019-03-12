@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"../consensus"
@@ -22,10 +23,12 @@ type Node struct {
 }
 
 type MsgBuffer struct {
-	ReqMsgs        []*consensus.RequestMsg
-	PrePrepareMsgs []*consensus.PrePrepareMsg
-	PrepareMsgs    []*consensus.VoteMsg
-	CommitMsgs     []*consensus.VoteMsg
+	ReqMsgs             []*consensus.RequestMsg
+	PrePrepareMsgs      []*consensus.PrePrepareMsg
+	PrepareMsgs         []*consensus.VoteMsg
+	CommitMsgs          []*consensus.VoteMsg
+	ViewChangeMsgs      []*consensus.ViewChangeMsg
+	ViewChangeClameMsgs []*consensus.ViewChangeClameMsg
 }
 
 type View struct {
@@ -36,30 +39,39 @@ type View struct {
 const ResolvingTimeDuration = time.Millisecond * 1000 // 1 second.
 
 func NewNode(nodeID string) *Node {
-	const viewID = 10000000000 // temporary.
 
 	node := &Node{
 		// Hard-coded for test.
 		NodeID: nodeID,
 		NodeTable: map[string]string{
-			"Apple":  "localhost:1111",
-			"MS":     "localhost:1112",
-			"Google": "localhost:1113",
-			"IBM":    "localhost:1114",
+			"DC1-1": "localhost:1111",
+			"DC1-2": "localhost:1112",
+			"DC1-3": "localhost:1113",
+			"DC1-4": "localhost:1114",
+			"DC2-1": "localhost:2221",
+			"DC2-2": "localhost:2222",
+			"DC2-3": "localhost:2223",
+			"DC2-4": "localhost:2224",
+			"DC3-1": "localhost:3331",
+			"DC3-2": "localhost:3332",
+			"DC3-3": "localhost:3333",
+			"DC3-4": "localhost:3334",
 		},
 		View: &View{
-			ID:      viewID,
-			Primary: "Apple",
+			ID:      1,
+			Primary: "DC1-1",
 		},
 
 		// Consensus-related struct
 		CurrentState:  nil,
 		CommittedMsgs: make([]*consensus.RequestMsg, 0),
 		MsgBuffer: &MsgBuffer{
-			ReqMsgs:        make([]*consensus.RequestMsg, 0),
-			PrePrepareMsgs: make([]*consensus.PrePrepareMsg, 0),
-			PrepareMsgs:    make([]*consensus.VoteMsg, 0),
-			CommitMsgs:     make([]*consensus.VoteMsg, 0),
+			ReqMsgs:             make([]*consensus.RequestMsg, 0),
+			PrePrepareMsgs:      make([]*consensus.PrePrepareMsg, 0),
+			PrepareMsgs:         make([]*consensus.VoteMsg, 0),
+			CommitMsgs:          make([]*consensus.VoteMsg, 0),
+			ViewChangeMsgs:      make([]*consensus.ViewChangeMsg, 0),
+			ViewChangeClameMsgs: make([]*consensus.ViewChangeClameMsg, 0),
 		},
 
 		// Channels
@@ -78,6 +90,50 @@ func NewNode(nodeID string) *Node {
 	go node.resolveMsg()
 
 	return node
+}
+
+func (node *Node) getcenter() string {
+
+	s := strings.Split(node.NodeID, "-")
+	return s[0]
+}
+
+func getcenter(nodeID string) string {
+
+	s := strings.Split(nodeID, "-")
+	return s[0]
+}
+
+func (node *Node) BroadcastWithinDC(msg interface{}, path string) map[string]error {
+	errorMap := make(map[string]error)
+
+	for nodeID, url := range node.NodeTable {
+		if nodeID == node.NodeID {
+			continue
+		}
+
+		localcenter := node.getcenter()
+
+		targetcenter := getcenter(nodeID)
+
+		if localcenter != targetcenter {
+			continue
+		}
+
+		jsonMsg, err := json.Marshal(msg)
+		if err != nil {
+			errorMap[nodeID] = err
+			continue
+		}
+
+		send(url+path, jsonMsg)
+	}
+
+	if len(errorMap) == 0 {
+		return nil
+	} else {
+		return errorMap
+	}
 }
 
 func (node *Node) Broadcast(msg interface{}, path string) map[string]error {
@@ -122,6 +178,18 @@ func (node *Node) Reply(msg *consensus.ReplyMsg) error {
 	return nil
 }
 
+func (node *Node) GetViewChange(reqMsg *consensus.ViewChangeMsg) error {
+
+	//TODO
+	return nil
+}
+
+func (node *Node) GetViewChangeClame(reqMsg *consensus.ViewChangeClameMsg) error {
+
+	//TODO
+	return nil
+}
+
 // GetReq can be called when the node's CurrentState is nil.
 // Consensus start procedure for the Primary.
 func (node *Node) GetReq(reqMsg *consensus.RequestMsg) error {
@@ -143,7 +211,7 @@ func (node *Node) GetReq(reqMsg *consensus.RequestMsg) error {
 
 	// Send getPrePrepare message
 	if prePrepareMsg != nil {
-		node.Broadcast(prePrepareMsg, "/preprepare")
+		node.BroadcastWithinDC(prePrepareMsg, "/preprepare")
 		LogStage("Pre-prepare", true)
 	}
 
@@ -393,6 +461,22 @@ func (node *Node) resolveMsg() {
 		// Get buffered messages from the dispatcher.
 		msgs := <-node.MsgDelivery
 		switch msgs.(type) {
+		case []*consensus.ViewChangeMsg:
+			errs := node.resolveViewChangeMsg(msgs.([]*consensus.ViewChangeMsg))
+			if len(errs) != 0 {
+				for _, err := range errs {
+					fmt.Println(err)
+				}
+				// TODO: send err to ErrorChannel
+			}
+		case []*consensus.ViewChangeClameMsg:
+			errs := node.resolveViewChangeClameMsg(msgs.([]*consensus.ViewChangeClameMsg))
+			if len(errs) != 0 {
+				for _, err := range errs {
+					fmt.Println(err)
+				}
+				// TODO: send err to ErrorChannel
+			}
 		case []*consensus.RequestMsg:
 			errs := node.resolveRequestMsg(msgs.([]*consensus.RequestMsg))
 			if len(errs) != 0 {
@@ -441,6 +525,42 @@ func (node *Node) alarmToDispatcher() {
 		time.Sleep(ResolvingTimeDuration)
 		node.Alarm <- true
 	}
+}
+
+func (node *Node) resolveViewChangeMsg(msgs []*consensus.ViewChangeMsg) []error {
+	// errs := make([]error, 0)
+	// //TODO
+	// // Resolve messages
+	// for _, reqMsg := range msgs {
+	// 	err := node.GetViewChange(reqMsg)
+	// 	if err != nil {
+	// 		errs = append(errs, err)
+	// 	}
+	// }
+
+	// if len(errs) != 0 {
+	// 	return errs
+	// }
+
+	return nil
+}
+
+func (node *Node) resolveViewChangeClameMsg(msgs []*consensus.ViewChangeClameMsg) []error {
+	// errs := make([]error, 0)
+	// //TODO
+	// // Resolve messages
+	// for _, reqMsg := range msgs {
+	// 	err := node.GetViewChange(reqMsg)
+	// 	if err != nil {
+	// 		errs = append(errs, err)
+	// 	}
+	// }
+
+	// if len(errs) != 0 {
+	// 	return errs
+	// }
+
+	return nil
 }
 
 func (node *Node) resolveRequestMsg(msgs []*consensus.RequestMsg) []error {

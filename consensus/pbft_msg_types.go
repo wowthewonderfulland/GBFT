@@ -1,5 +1,22 @@
 package consensus
 
+type ViewChangeMsg struct {
+	// TODO need to decide
+	Timestamp    int64  `json:"timestamp"`
+	ClientID     string `json:"clientID"`
+	Operation    string `json:"operation"`
+	newViewID    int64  `json:"viewID"`
+	newPrimaryID string `json:"clientID"`
+}
+
+type ViewChangeClameMsg struct {
+	// TODO need to decide
+	Timestamp    int64  `json:"timestamp"`
+	ClientID     string `json:"clientID"`
+	Operation    string `json:"operation"`
+	ViewID       int64  `json:"viewID"`
+}
+
 type RequestMsg struct {
 	Timestamp  int64  `json:"timestamp"`
 	ClientID   string `json:"clientID"`
@@ -27,10 +44,11 @@ type VoteMsg struct {
 	SequenceID int64  `json:"sequenceID"`
 	Digest     string `json:"digest"`
 	NodeID     string `json:"nodeID"`
-	MsgType           `json:"msgType"`
+	MsgType    `json:"msgType"`
 }
 
 type MsgType int
+
 const (
 	PrepareMsg MsgType = iota
 	CommitMsg

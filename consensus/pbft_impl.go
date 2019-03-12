@@ -3,8 +3,8 @@ package consensus
 import (
 	"encoding/json"
 	"errors"
-	"time"
 	"fmt"
+	"time"
 )
 
 type State struct {
@@ -15,12 +15,13 @@ type State struct {
 }
 
 type MsgLogs struct {
-	ReqMsg        *RequestMsg
-	PrepareMsgs   map[string]*VoteMsg
-	CommitMsgs    map[string]*VoteMsg
+	ReqMsg      *RequestMsg
+	PrepareMsgs map[string]*VoteMsg
+	CommitMsgs  map[string]*VoteMsg
 }
 
 type Stage int
+
 const (
 	Idle        Stage = iota // Node is created successfully, but the consensus process is not started yet.
 	PrePrepared              // The ReqMsgs is processed successfully. The node is ready to head to the Prepare stage.
@@ -38,12 +39,12 @@ func CreateState(viewID int64, lastSequenceID int64) *State {
 	return &State{
 		ViewID: viewID,
 		MsgLogs: &MsgLogs{
-			ReqMsg:nil,
-			PrepareMsgs:make(map[string]*VoteMsg),
-			CommitMsgs:make(map[string]*VoteMsg),
+			ReqMsg:      nil,
+			PrepareMsgs: make(map[string]*VoteMsg),
+			CommitMsgs:  make(map[string]*VoteMsg),
 		},
 		LastSequenceID: lastSequenceID,
-		CurrentStage: Idle,
+		CurrentStage:   Idle,
 	}
 }
 
@@ -75,9 +76,9 @@ func (state *State) StartConsensus(request *RequestMsg) (*PrePrepareMsg, error) 
 	state.CurrentStage = PrePrepared
 
 	return &PrePrepareMsg{
-		ViewID: state.ViewID,
+		ViewID:     state.ViewID,
 		SequenceID: sequenceID,
-		Digest: digest,
+		Digest:     digest,
 		RequestMsg: request,
 	}, nil
 }
@@ -95,15 +96,24 @@ func (state *State) PrePrepare(prePrepareMsg *PrePrepareMsg) (*VoteMsg, error) {
 	state.CurrentStage = PrePrepared
 
 	return &VoteMsg{
-		ViewID: state.ViewID,
+		ViewID:     state.ViewID,
 		SequenceID: prePrepareMsg.SequenceID,
-		Digest: prePrepareMsg.Digest,
-		MsgType: PrepareMsg,
+		Digest:     prePrepareMsg.Digest,
+		MsgType:    PrepareMsg,
 	}, nil
 }
 
+func (state *State) ViewChange(viewChangeMsg *ViewChangeMsg) (*ViewChangeMsg, error) {
 
-func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error){
+	return nil, nil
+}
+
+func (state *State) ViewChangeClame(viewChangClameMsg *ViewChangeClameMsg) (*ViewChangeClameMsg, error) {
+
+	return nil, nil
+}
+
+func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error) {
 	if !state.verifyMsg(prepareMsg.ViewID, prepareMsg.SequenceID, prepareMsg.Digest) {
 		return nil, errors.New("prepare message is corrupted")
 	}
@@ -119,10 +129,10 @@ func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error){
 		state.CurrentStage = Prepared
 
 		return &VoteMsg{
-			ViewID: state.ViewID,
+			ViewID:     state.ViewID,
 			SequenceID: prepareMsg.SequenceID,
-			Digest: prepareMsg.Digest,
-			MsgType: CommitMsg,
+			Digest:     prepareMsg.Digest,
+			MsgType:    CommitMsg,
 		}, nil
 	}
 
@@ -148,10 +158,10 @@ func (state *State) Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error) {
 		state.CurrentStage = Committed
 
 		return &ReplyMsg{
-			ViewID: state.ViewID,
+			ViewID:    state.ViewID,
 			Timestamp: state.MsgLogs.ReqMsg.Timestamp,
-			ClientID: state.MsgLogs.ReqMsg.ClientID,
-			Result: result,
+			ClientID:  state.MsgLogs.ReqMsg.ClientID,
+			Result:    result,
 		}, state.MsgLogs.ReqMsg, nil
 	}
 
