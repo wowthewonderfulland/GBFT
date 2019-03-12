@@ -1,6 +1,6 @@
 package consensus
 
-type PBFT interface {
+type GBFT interface {
 	StartConsensus(request *RequestMsg) (*PrePrepareMsg, error)
 	PrePrepare(prePrepareMsg *PrePrepareMsg) (*VoteMsg, error)
 	Prepare(prepareMsg *VoteMsg) (*VoteMsg, error)

@@ -11,10 +11,10 @@ type ViewChangeMsg struct {
 
 type ViewChangeClameMsg struct {
 	// TODO need to decide
-	Timestamp    int64  `json:"timestamp"`
-	ClientID     string `json:"clientID"`
-	Operation    string `json:"operation"`
-	ViewID       int64  `json:"viewID"`
+	Timestamp int64  `json:"timestamp"`
+	ClientID  string `json:"clientID"`
+	Operation string `json:"operation"`
+	ViewID    int64  `json:"viewID"`
 }
 
 type RequestMsg struct {
