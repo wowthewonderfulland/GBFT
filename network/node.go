@@ -20,6 +20,7 @@ type Node struct {
 	MsgEntrance   chan interface{}
 	MsgDelivery   chan interface{}
 	Alarm         chan bool
+	IsByzantine   int
 }
 
 type MsgBuffer struct {
@@ -38,7 +39,7 @@ type View struct {
 
 const ResolvingTimeDuration = time.Millisecond * 1000 // 1 second.
 
-func NewNode(nodeID string) *Node {
+func NewNode(nodeID string, isb int) *Node {
 
 	node := &Node{
 		// Hard-coded for test.
@@ -73,7 +74,7 @@ func NewNode(nodeID string) *Node {
 			ViewChangeMsgs:      make([]*consensus.ViewChangeMsg, 0),
 			ViewChangeClameMsgs: make([]*consensus.ViewChangeClameMsg, 0),
 		},
-
+		IsByzantine: isb,
 		// Channels
 		MsgEntrance: make(chan interface{}),
 		MsgDelivery: make(chan interface{}),
@@ -117,6 +118,7 @@ func getcenter(nodeID string) string {
 }
 
 func (node *Node) BroadcastWithinDC(msg interface{}, path string) map[string]error {
+
 	errorMap := make(map[string]error)
 
 	for nodeID, url := range node.NodeTable {
@@ -139,6 +141,10 @@ func (node *Node) BroadcastWithinDC(msg interface{}, path string) map[string]err
 		}
 
 		send(url+path, jsonMsg)
+
+		if node.IsByzantine == 1 {
+			return nil
+		}
 	}
 
 	if len(errorMap) == 0 {

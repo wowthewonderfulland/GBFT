@@ -5,19 +5,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"../consensus"
 )
 
 type Server struct {
-	url  string
-	node *Node
+	url       string
+	beginTime int64
+	node      *Node
 }
 
-func NewServer(nodeID string) *Server {
-	node := NewNode(nodeID)
-	server := &Server{node.NodeTable[nodeID], node}
-
+func NewServer(nodeID string, isByzantine int) *Server {
+	node := NewNode(nodeID, isByzantine)
+	server := &Server{node.NodeTable[nodeID], time.Now().UnixNano(), node}
+	fmt.Println("time:::::: ", server.beginTime)
 	server.setRoute()
 
 	return server
@@ -48,7 +50,7 @@ func (server *Server) getReq(writer http.ResponseWriter, request *http.Request) 
 		fmt.Println(err)
 		return
 	}
-
+	server.beginTime = time.Now().UnixNano()
 	server.node.MsgEntrance <- &msg
 }
 
@@ -94,6 +96,8 @@ func (server *Server) getReply(writer http.ResponseWriter, request *http.Request
 	}
 
 	server.node.GetReply(&msg)
+
+	fmt.Println("[Handle Time]: ", time.Now().UnixNano()-server.beginTime)
 }
 
 func (server *Server) getViewChange(writer http.ResponseWriter, request *http.Request) {

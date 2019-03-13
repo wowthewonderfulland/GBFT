@@ -148,30 +148,19 @@ func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, *ViewChangeMsg, erro
 
 	// Append msg to its logs
 	state.MsgLogs.PrepareMsgs[prepareMsg.NodeID] = prepareMsg
-
 	// Print current voting status
 	fmt.Printf("[Prepare-Vote]: %d\n", len(state.MsgLogs.PrepareMsgs))
 
 	if state.prepared() {
 
-		if messagesConcensused() {
-			// Change the stage to prepared.
-			state.CurrentStage = Prepared
+		state.CurrentStage = Prepared
 
-			return &VoteMsg{
-				ViewID:     state.ViewID,
-				SequenceID: prepareMsg.SequenceID,
-				Digest:     prepareMsg.Digest,
-				MsgType:    CommitMsg,
-			}, nil, nil
-		}
-		state.CurrentStage = ViewChanged
-
-		return nil, &ViewChangeMsg{
+		return &VoteMsg{
 			ViewID:     state.ViewID,
 			SequenceID: prepareMsg.SequenceID,
 			Digest:     prepareMsg.Digest,
-		}, nil
+			MsgType:    CommitMsg,
+		}, nil, nil
 	}
 
 	return nil, nil, nil
@@ -262,11 +251,6 @@ func (state *State) viewChanged() bool {
 	if len(state.MsgLogs.ViewChangeMsg) < (f+1)*(3-1) {
 		return false
 	}
-	return true
-}
-
-func messagesConcensused() bool {
-
 	return true
 }
 

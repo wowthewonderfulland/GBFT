@@ -1,10 +1,10 @@
-all: main 
+all: main fakemain
 
-# fackmain:
-# 	go build fackmain.go
+fakemain:
+	go build fakemain.go
 
 main:
 	go build main.go
 
 clean:
-	rm ./main
+	rm ./main ./fakemain
