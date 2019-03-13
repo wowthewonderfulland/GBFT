@@ -1,4 +1,4 @@
-all: main #fackmain
+all: main 
 
 # fackmain:
 # 	go build fackmain.go
