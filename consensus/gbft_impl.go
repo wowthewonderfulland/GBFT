@@ -15,9 +15,11 @@ type State struct {
 }
 
 type MsgLogs struct {
-	ReqMsg      *RequestMsg
-	PrepareMsgs map[string]*VoteMsg
-	CommitMsgs  map[string]*VoteMsg
+	ViewChangeMsg      map[string]*ViewChangeMsg
+	ViewChangeClameMsg map[string]*ViewChangeClameMsg
+	ReqMsg             *RequestMsg
+	PrepareMsgs        map[string]*VoteMsg
+	CommitMsgs         map[string]*VoteMsg
 }
 
 type Stage int
@@ -27,6 +29,7 @@ const (
 	PrePrepared              // The ReqMsgs is processed successfully. The node is ready to head to the Prepare stage.
 	Prepared                 // Same with `prepared` stage explained in the original paper.
 	Committed                // Same with `committed-local` stage explained in the original paper.
+	ViewChanged              // Primary node fail, pending to change to Idle
 )
 
 // f: # of Byzantine faulty node
@@ -39,9 +42,11 @@ func CreateState(viewID int64, lastSequenceID int64) *State {
 	return &State{
 		ViewID: viewID,
 		MsgLogs: &MsgLogs{
-			ReqMsg:      nil,
-			PrepareMsgs: make(map[string]*VoteMsg),
-			CommitMsgs:  make(map[string]*VoteMsg),
+			ReqMsg:             nil,
+			ViewChangeMsg:      make(map[string]*ViewChangeMsg),
+			ViewChangeClameMsg: make(map[string]*ViewChangeClameMsg),
+			PrepareMsgs:        make(map[string]*VoteMsg),
+			CommitMsgs:         make(map[string]*VoteMsg),
 		},
 		LastSequenceID: lastSequenceID,
 		CurrentStage:   Idle,
@@ -103,19 +108,42 @@ func (state *State) PrePrepare(prePrepareMsg *PrePrepareMsg) (*VoteMsg, error) {
 	}, nil
 }
 
-func (state *State) ViewChange(viewChangeMsg *ViewChangeMsg) (*ViewChangeMsg, error) {
-
-	return nil, nil
-}
-
-func (state *State) ViewChangeClame(viewChangClameMsg *ViewChangeClameMsg) (*ViewChangeClameMsg, error) {
-
-	return nil, nil
-}
-
-func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error) {
-	if !state.verifyMsg(prepareMsg.ViewID, prepareMsg.SequenceID, prepareMsg.Digest) {
+func (state *State) ViewChange(viewChangeMsg *ViewChangeMsg) (*ViewChangeClameMsg, error) {
+	if !state.verifyMsg(viewChangeMsg.ViewID, viewChangeMsg.SequenceID, viewChangeMsg.Digest) {
 		return nil, errors.New("prepare message is corrupted")
+	}
+
+	// Append msg to its logs
+	state.MsgLogs.ViewChangeMsg[viewChangeMsg.ClientID] = viewChangeMsg
+
+	// Print current voting status
+	fmt.Printf("[ViewChange]: %d\n", len(state.MsgLogs.ViewChangeMsg))
+
+	if state.viewChanged() {
+		// Change the stage to prepared.
+		state.CurrentStage = ViewChanged
+
+		return &ViewChangeClameMsg{
+			ViewID:     state.ViewID,
+			SequenceID: viewChangeMsg.SequenceID,
+			Digest:     viewChangeMsg.Digest,
+		}, nil
+	}
+
+	return nil, nil
+}
+
+func (state *State) ViewChangeClame(viewChangClameMsg *ViewChangeClameMsg) error {
+	if !state.verifyMsg(viewChangClameMsg.ViewID, viewChangClameMsg.SequenceID, viewChangClameMsg.Digest) {
+		return errors.New("prepare message is corrupted")
+	}
+	state.CurrentStage = Idle
+	return nil
+}
+
+func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, *ViewChangeMsg, error) {
+	if !state.verifyMsg(prepareMsg.ViewID, prepareMsg.SequenceID, prepareMsg.Digest) {
+		return nil, nil, errors.New("prepare message is corrupted")
 	}
 
 	// Append msg to its logs
@@ -125,18 +153,28 @@ func (state *State) Prepare(prepareMsg *VoteMsg) (*VoteMsg, error) {
 	fmt.Printf("[Prepare-Vote]: %d\n", len(state.MsgLogs.PrepareMsgs))
 
 	if state.prepared() {
-		// Change the stage to prepared.
-		state.CurrentStage = Prepared
 
-		return &VoteMsg{
+		if messagesConcensused() {
+			// Change the stage to prepared.
+			state.CurrentStage = Prepared
+
+			return &VoteMsg{
+				ViewID:     state.ViewID,
+				SequenceID: prepareMsg.SequenceID,
+				Digest:     prepareMsg.Digest,
+				MsgType:    CommitMsg,
+			}, nil, nil
+		}
+		state.CurrentStage = ViewChanged
+
+		return nil, &ViewChangeMsg{
 			ViewID:     state.ViewID,
 			SequenceID: prepareMsg.SequenceID,
 			Digest:     prepareMsg.Digest,
-			MsgType:    CommitMsg,
 		}, nil
 	}
 
-	return nil, nil
+	return nil, nil, nil
 }
 
 func (state *State) Commit(commitMsg *VoteMsg) (*ReplyMsg, *RequestMsg, error) {
@@ -216,6 +254,18 @@ func (state *State) committed() bool {
 	if len(state.MsgLogs.CommitMsgs) < 2*f {
 		return false
 	}
+
+	return true
+}
+
+func (state *State) viewChanged() bool {
+	if len(state.MsgLogs.ViewChangeMsg) < (f+1)*(3-1) {
+		return false
+	}
+	return true
+}
+
+func messagesConcensused() bool {
 
 	return true
 }

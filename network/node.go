@@ -92,6 +92,19 @@ func NewNode(nodeID string) *Node {
 	return node
 }
 
+func (node *Node) getNextPrimary(currentPrimary string) string {
+	nextMapping := map[string]string{
+		"DC1-1": "DC2-1",
+		"DC2-1": "DC3-1",
+		"DC3-1": "DC4-1",
+		"DC4-1": "DC1-1",
+	}
+	if val, ok := nextMapping[currentPrimary]; ok {
+		return val
+	}
+	return "DC1-1"
+}
+
 func (node *Node) getcenter() string {
 
 	s := strings.Split(node.NodeID, "-")
@@ -131,9 +144,8 @@ func (node *Node) BroadcastWithinDC(msg interface{}, path string) map[string]err
 
 	if len(errorMap) == 0 {
 		return nil
-	} else {
-		return errorMap
 	}
+	return errorMap
 }
 
 func (node *Node) Broadcast(msg interface{}, path string) map[string]error {
@@ -155,9 +167,8 @@ func (node *Node) Broadcast(msg interface{}, path string) map[string]error {
 
 	if len(errorMap) == 0 {
 		return nil
-	} else {
-		return errorMap
 	}
+	return errorMap
 }
 
 func (node *Node) Reply(msg *consensus.ReplyMsg) error {
@@ -178,15 +189,42 @@ func (node *Node) Reply(msg *consensus.ReplyMsg) error {
 	return nil
 }
 
-func (node *Node) GetViewChange(reqMsg *consensus.ViewChangeMsg) error {
+func (node *Node) GetViewChange(msg *consensus.ViewChangeMsg) error {
 
-	//TODO
+	LogMsg(msg)
+
+	viewchangeclameMsg, err := node.CurrentState.ViewChange(msg)
+
+	if node.NodeID != msg.NextPrimaryID {
+		return nil
+	}
+
+	if err != nil {
+		return err
+	}
+
+	if viewchangeclameMsg != nil {
+		// Attach node ID to the message
+		node.View.Primary = node.NodeID
+		node.View.ID = node.View.ID + 1
+		viewchangeclameMsg.ClientID = node.NodeID
+
+		LogStage("ViewChangeConfirm", true)
+		node.Broadcast(viewchangeclameMsg, "/viewchangeclame")
+		LogStage("ViewChangeConfirm", false)
+	}
+
 	return nil
 }
 
-func (node *Node) GetViewChangeClame(reqMsg *consensus.ViewChangeClameMsg) error {
+func (node *Node) GetViewChangeClame(msg *consensus.ViewChangeClameMsg) error {
+	err := node.CurrentState.ViewChangeClame(msg)
+	if err != nil {
+		return err
+	}
 
-	//TODO
+	node.View.ID = msg.ViewID
+	node.View.Primary = msg.ClientID
 	return nil
 }
 
@@ -229,17 +267,17 @@ func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 		return err
 	}
 
-	prePareMsg, err := node.CurrentState.PrePrepare(prePrepareMsg)
+	prepareMsg, err := node.CurrentState.PrePrepare(prePrepareMsg)
 	if err != nil {
 		return err
 	}
 
-	if prePareMsg != nil {
+	if prepareMsg != nil {
 		// Attach node ID to the message
-		prePareMsg.NodeID = node.NodeID
+		prepareMsg.NodeID = node.NodeID
 
 		LogStage("Pre-prepare", true)
-		node.Broadcast(prePareMsg, "/prepare")
+		node.Broadcast(prepareMsg, "/prepare")
 		LogStage("Prepare", false)
 	}
 
@@ -249,12 +287,18 @@ func (node *Node) GetPrePrepare(prePrepareMsg *consensus.PrePrepareMsg) error {
 func (node *Node) GetPrepare(prepareMsg *consensus.VoteMsg) error {
 	LogMsg(prepareMsg)
 
-	commitMsg, err := node.CurrentState.Prepare(prepareMsg)
+	commitMsg, viewChangeMsg, err := node.CurrentState.Prepare(prepareMsg)
 	if err != nil {
 		return err
 	}
 
-	if commitMsg != nil {
+	if viewChangeMsg != nil {
+		viewChangeMsg.NextPrimaryID = node.getNextPrimary(node.View.Primary)
+
+		LogStage("View-change", true)
+		node.Broadcast(viewChangeMsg, "/viewchange")
+		LogStage("View-change", false)
+	} else if commitMsg != nil {
 		// Attach node ID to the message
 		commitMsg.NodeID = node.NodeID
 
@@ -528,37 +572,37 @@ func (node *Node) alarmToDispatcher() {
 }
 
 func (node *Node) resolveViewChangeMsg(msgs []*consensus.ViewChangeMsg) []error {
-	// errs := make([]error, 0)
-	// //TODO
-	// // Resolve messages
-	// for _, reqMsg := range msgs {
-	// 	err := node.GetViewChange(reqMsg)
-	// 	if err != nil {
-	// 		errs = append(errs, err)
-	// 	}
-	// }
 
-	// if len(errs) != 0 {
-	// 	return errs
-	// }
+	errs := make([]error, 0)
+	// Resolve messages
+	for _, viewchangeMsg := range msgs {
+		err := node.GetViewChange(viewchangeMsg)
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) != 0 {
+		return errs
+	}
 
 	return nil
 }
 
 func (node *Node) resolveViewChangeClameMsg(msgs []*consensus.ViewChangeClameMsg) []error {
-	// errs := make([]error, 0)
-	// //TODO
-	// // Resolve messages
-	// for _, reqMsg := range msgs {
-	// 	err := node.GetViewChange(reqMsg)
-	// 	if err != nil {
-	// 		errs = append(errs, err)
-	// 	}
-	// }
 
-	// if len(errs) != 0 {
-	// 	return errs
-	// }
+	errs := make([]error, 0)
+	// Resolve messages
+	for _, viewchangeclameMsg := range msgs {
+		err := node.GetViewChangeClame(viewchangeclameMsg)
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) != 0 {
+		return errs
+	}
 
 	return nil
 }

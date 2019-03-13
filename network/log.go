@@ -21,6 +21,12 @@ func LogMsg(msg interface{}) {
 		} else if voteMsg.MsgType == consensus.CommitMsg {
 			fmt.Printf("[COMMIT] NodeID: %s\n", voteMsg.NodeID)
 		}
+	case *consensus.ViewChangeMsg:
+		// viewChangeMsg := msg.(*consensus.ViewChangeMsg)
+		fmt.Printf("[ViewChange]")
+	case *consensus.ViewChangeClameMsg:
+		// ViewChangeClameMsg := msg.(*consensus.ViewChangeClameMsg)
+		fmt.Printf("[ViewChangeClame]")
 	}
 }
 
