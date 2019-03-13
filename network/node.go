@@ -96,8 +96,7 @@ func (node *Node) getNextPrimary(currentPrimary string) string {
 	nextMapping := map[string]string{
 		"DC1-1": "DC2-1",
 		"DC2-1": "DC3-1",
-		"DC3-1": "DC4-1",
-		"DC4-1": "DC1-1",
+		"DC3-1": "DC1-1",
 	}
 	if val, ok := nextMapping[currentPrimary]; ok {
 		return val
@@ -161,7 +160,6 @@ func (node *Node) Broadcast(msg interface{}, path string) map[string]error {
 			errorMap[nodeID] = err
 			continue
 		}
-
 		send(url+path, jsonMsg)
 	}
 
@@ -204,10 +202,10 @@ func (node *Node) GetViewChange(msg *consensus.ViewChangeMsg) error {
 	}
 
 	if viewchangeclameMsg != nil {
-		// Attach node ID to the message
 		node.View.Primary = node.NodeID
-		node.View.ID = node.View.ID + 1
+		node.View.ID++
 		viewchangeclameMsg.ClientID = node.NodeID
+		viewchangeclameMsg.ViewID = node.View.ID
 
 		LogStage("ViewChangeConfirm", true)
 		node.Broadcast(viewchangeclameMsg, "/viewchangeclame")
@@ -249,7 +247,7 @@ func (node *Node) GetReq(reqMsg *consensus.RequestMsg) error {
 
 	// Send getPrePrepare message
 	if prePrepareMsg != nil {
-		node.BroadcastWithinDC(prePrepareMsg, "/preprepare")
+		node.Broadcast(prePrepareMsg, "/preprepare")
 		LogStage("Pre-prepare", true)
 	}
 
@@ -494,9 +492,18 @@ func (node *Node) routeMsgWhenAlarmed() []error {
 
 				node.MsgDelivery <- msgs
 			}
+
+		case consensus.ViewChanged:
+			// Check ViewChangeMessages, send them.
+			if len(node.MsgBuffer.ViewChangeMsgs) != 0 {
+				msgs := make([]*consensus.ViewChangeMsg, len(node.MsgBuffer.ViewChangeMsgs))
+				copy(msgs, node.MsgBuffer.ViewChangeMsgs)
+
+				node.MsgDelivery <- msgs
+			}
 		}
 	}
-
+	go node.resolveMsg()
 	return nil
 }
 
